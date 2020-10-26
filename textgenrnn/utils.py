@@ -1,3 +1,6 @@
+import os
+import time
+
 from keras.callbacks import LearningRateScheduler, Callback
 from keras.models import Model, load_model
 from keras.preprocessing import sequence
@@ -297,7 +300,69 @@ class save_model_weights(Callback):
         if self.save_epochs > 0 and (epoch+1) % self.save_epochs == 0 and self.num_epochs != (epoch+1):
             print("Saving Model Weights — Epoch #{}".format(epoch+1))
             self.textgenrnn.model.save_weights(
-                "{}_weights_epoch_{}.hdf5".format(self.weights_name, epoch+1))
+                os.path.join(self.textgenrnn.model_dir, "{}_weights_epoch_{}.hdf5".format(self.weights_name, epoch+1))
+            )
         else:
             self.textgenrnn.model.save_weights(
-                "{}_weights.hdf5".format(self.weights_name))
+                os.path.join(self.textgenrnn.model_dir, "{}_weights.hdf5".format(self.weights_name))
+            )
+
+        # Save new config
+        self.textgenrnn.config['epoch'] = epoch + 1
+        if logs and 'loss' in logs:
+            self.textgenrnn.config['loss'] = logs['loss']
+        if logs and 'val_loss' in logs:
+            self.textgenrnn.config['val_loss'] = logs['val_loss']
+        with open(os.path.join(self.textgenrnn.model_dir, "{}_config.json".format(self.textgenrnn.config['name'])),
+                  'w', encoding='utf8') as outfile:
+            json.dump(self.textgenrnn.config, outfile, ensure_ascii=False, indent=1)
+
+
+class PrintInfo(Callback):
+    def __init__(self, name, verbose):
+        super().__init__()
+        self.name = name
+        self.verbose = verbose
+        self.start_epoch = 0
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if self.verbose:
+            print("\r{} model, epoch {}...".format(self.name, epoch), end='')
+            self.start_epoch = time.perf_counter()
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.verbose:
+            tmp = "\r{} model, epoch {}[{:.0f}s]".format(self.name, epoch, time.perf_counter() - self.start_epoch)
+            if logs and 'loss' in logs:
+                tmp += ", loss: {:.4f}".format(logs['loss'])
+            if logs and 'val_loss' in logs:
+                tmp += ", validation loss: {:.4f}".format(logs['val_loss'])
+            print(tmp)
+
+
+class StopAtLoss(Callback):
+    def __init__(self, name, min_loss, min_epoch=0, verbose=0):
+        super().__init__()
+        self.name = name
+        self.min_loss = min_loss
+        self.min_epoch = min_epoch
+        self.stopped_epoch = 0
+        self.stopped_loss = 0
+        self.verbose = verbose
+
+    def on_epoch_end(self, epoch, logs=None):
+        if not logs or not logs.get(self.name):
+            return
+        val = logs[self.name]
+        if val <= self.min_loss:
+            if self.min_epoch and epoch < self.min_epoch:
+                if self.verbose:
+                    print('Epoch {} reached target {} {:.4f} too early'.format(epoch, self.name, val))
+                return
+            self.model.stop_training = True
+            self.stopped_epoch = epoch
+            self.stopped_loss = val
+
+    def on_train_end(self, logs=None):
+        if self.stopped_epoch > 0 and self.verbose > 0:
+            print('Epoch {:05d}: reached target {} {:.4f}'.format(self.stopped_epoch + 1, self.name, self.stopped_loss))
