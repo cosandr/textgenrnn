@@ -1,5 +1,5 @@
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Input, Embedding, Dense, LSTM, Bidirectional
+from tensorflow.keras.layers import Input, Embedding, Dense, LSTM, Bidirectional, GRU
 from tensorflow.keras.layers import concatenate, Reshape, SpatialDropout1D
 from tensorflow.keras.models import Model
 from tensorflow.keras import backend as K
@@ -27,7 +27,10 @@ def textgenrnn_model(num_classes, cfg, context_size=None,
     rnn_layer_list = []
     for i in range(cfg['rnn_layers']):
         prev_layer = embedded if i == 0 else rnn_layer_list[-1]
-        rnn_layer_list.append(new_rnn(cfg, i+1)(prev_layer))
+        if cfg.get('rnn_type') == 'gru':
+            rnn_layer_list.append(new_rnn_gru(cfg, i + 1)(prev_layer))
+        else:
+            rnn_layer_list.append(new_rnn(cfg, i + 1)(prev_layer))
 
     seq_concat = concatenate([embedded] + rnn_layer_list, name='rnn_concat')
     attention = AttentionWeightedAverage(name='attention')(seq_concat)
@@ -97,3 +100,29 @@ def new_rnn(cfg, layer_num):
                     return_sequences=True,
                     recurrent_activation='sigmoid',
                     name='rnn_{}'.format(layer_num))
+
+
+def new_rnn_gru(cfg, layer_num):
+    use_cudnngru = K.backend() == 'tensorflow' and len(config.get_visible_devices('GPU')) > 0
+    if use_cudnngru:
+        if cfg['rnn_bidirectional']:
+            return Bidirectional(GRU(cfg['rnn_size'],
+                                          return_sequences=True),
+                                 name='rnn_{}'.format(layer_num))
+
+        return GRU(cfg['rnn_size'],
+                        return_sequences=True,
+                        name='rnn_{}'.format(layer_num))
+    else:
+        if cfg['rnn_bidirectional']:
+            return Bidirectional(GRU(cfg['rnn_size'],
+                                     return_sequences=True,
+                                     recurrent_activation='sigmoid',
+                                     reset_after=True),
+                                 name='rnn_{}'.format(layer_num))
+
+        return GRU(cfg['rnn_size'],
+                   return_sequences=True,
+                   recurrent_activation='sigmoid',
+                   reset_after=True,
+                   name='rnn_{}'.format(layer_num))

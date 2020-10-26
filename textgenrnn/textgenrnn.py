@@ -34,6 +34,7 @@ class textgenrnn:
         'rnn_layers': 2,
         'rnn_size': 128,
         'rnn_bidirectional': False,
+        'rnn_type': 'lstm',
         'max_length': 40,
         'max_words': 10000,
         'dim_embeddings': 100,
@@ -286,9 +287,10 @@ class textgenrnn:
         self.config = self.default_config.copy()
         self.config.update(**kwargs)
 
-        print("Training new model w/ {}-layer, {}-cell {}LSTMs".format(
+        print("Training new model w/ {}-layer, {}-cell {}{}s".format(
             self.config['rnn_layers'], self.config['rnn_size'],
-            'Bidirectional ' if self.config['rnn_bidirectional'] else ''
+            'Bidirectional ' if self.config['rnn_bidirectional'] else '',
+            self.config['rnn_type'].upper()
         ))
 
         # Create text vocabulary for new texts
