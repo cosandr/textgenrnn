@@ -1,4 +1,5 @@
 import json
+import os
 import re
 
 import numpy as np
@@ -15,6 +16,7 @@ from tensorflow.keras.callbacks import LearningRateScheduler
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.text import Tokenizer, text_to_word_sequence
+from tensorflow.python.keras.callbacks import TensorBoard, EarlyStopping, ReduceLROnPlateau
 
 from .model import textgenrnn_model
 from .model_training import generate_sequences_from_texts
@@ -25,6 +27,8 @@ from .utils import (
     textgenrnn_generate,
     textgenrnn_texts_from_file,
     textgenrnn_texts_from_file_context,
+    PrintInfo,
+    StopAtLoss,
 )
 
 
@@ -37,6 +41,9 @@ class textgenrnn:
         'rnn_type': 'lstm',
         'max_length': 40,
         'max_words': 10000,
+        'epoch': 0,
+        'loss': -1,
+        'val_loss': -1,
         'dim_embeddings': 100,
         'word_level': False,
         'single_text': False
@@ -47,7 +54,10 @@ class textgenrnn:
                  vocab_path=None,
                  config_path=None,
                  name="textgenrnn",
-                 allow_growth=None):
+                 allow_growth=None,
+                 model_dir="./"):
+
+        self.model_dir = model_dir
 
         if weights_path is None:
             weights_path = resource_filename(__name__,
@@ -216,7 +226,7 @@ class textgenrnn:
             if new_model:
                 weights_path = None
             else:
-                weights_path = "{}_weights.hdf5".format(self.config['name'])
+                weights_path = os.path.join(self.model_dir, "{}_weights.hdf5".format(self.config['name']))
                 self.save(weights_path)
 
 
@@ -256,9 +266,8 @@ class textgenrnn:
                 print("Training on {} GPUs.".format(num_gpus))
             else:
                 model_t = self.model
-
         model_t.fit(gen, steps_per_epoch=steps_per_epoch,
-                              epochs=num_epochs,
+                              epochs=num_epochs + self.config['epoch'], initial_epoch=self.config['epoch'],
                               callbacks=[
                                   LearningRateScheduler(
                                       lr_linear_decay),
@@ -267,11 +276,48 @@ class textgenrnn:
                                       max_gen_length),
                                   save_model_weights(
                                       self, num_epochs,
-                                      save_epochs)],
+                                      save_epochs),
+                                  PrintInfo(self.config['name'], verbose),
+                                  TensorBoard(
+                                      log_dir=kwargs.pop('log_path', './logs/{}'.format(self.config['name'])),
+                                      batch_size=batch_size,
+                                      write_graph=True,
+                                      write_images=False,
+                                  ),
+                                  EarlyStopping(
+                                      monitor='loss',
+                                      min_delta=kwargs.pop('loss_min_delta', 0.05),
+                                      patience=kwargs.pop('loss_patience', 5),
+                                      mode='min',
+                                      verbose=verbose,
+                                      restore_best_weights=kwargs.pop('loss_restore', False),
+                                  ),
+                                  StopAtLoss(
+                                      name='loss',
+                                      verbose=verbose,
+                                      min_loss=kwargs.pop('loss_stop', 0.5),
+                                  ),
+                                  EarlyStopping(
+                                      monitor='val_loss',
+                                      min_delta=kwargs.pop('val_min_delta', 0.05),
+                                      patience=kwargs.pop('val_patience', 10),
+                                      mode='min',
+                                      verbose=verbose,
+                                      restore_best_weights=kwargs.pop('val_restore', False),
+                                  ),
+                                  ReduceLROnPlateau(
+                                      monitor='loss',
+                                      min_delta=kwargs.pop('plat_min_delta', 0.03),
+                                      factor=kwargs.pop('plat_factor', 0.2),
+                                      patience=kwargs.pop('plat_patience', 4),
+                                      cooldown=kwargs.pop('plat_cooldown', 2),
+                                      verbose=verbose,
+                                  ),
+                              ],
                               verbose=verbose,
                               max_queue_size=10,
                               validation_data=gen_val,
-                              validation_steps=val_steps
+                              validation_steps=val_steps,
                               )
 
         # Keep the text-only version of the model if using context labels
@@ -318,13 +364,13 @@ class textgenrnn:
                                       cfg=self.config)
 
         # Save the files needed to recreate the model
-        with open('{}_vocab.json'.format(self.config['name']),
-                  'w', encoding='utf8') as outfile:
+        vocab_path = os.path.join(self.model_dir, "{}_vocab.json".format(self.config['name']))
+        with open(vocab_path, 'w', encoding='utf8') as outfile:
             json.dump(self.tokenizer.word_index, outfile, ensure_ascii=False)
 
-        with open('{}_config.json'.format(self.config['name']),
-                  'w', encoding='utf8') as outfile:
-            json.dump(self.config, outfile, ensure_ascii=False)
+        config_path = os.path.join(self.model_dir, "{}_config.json".format(self.config['name']))
+        with open(config_path, 'w', encoding='utf8') as outfile:
+            json.dump(self.config, outfile, ensure_ascii=False, indent=1)
 
         self.train_on_texts(texts, new_model=True,
                             via_new_model=True,
