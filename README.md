@@ -1,4 +1,24 @@
-# textgenrnn
+# textgenrnn with launcher
+
+Tons of arguments, examples:
+```sh
+# With GPUs if available
+# Generate at least 100 words
+./run.py --model-dir <path_to_model> generate -w 100
+# Force CPU
+./run.py --model-dir <path_to_model> --cpu generate
+# Train new model using text file at ../example
+# It will be written at ./models/example_3l128bi
+# Trains with all available GPU memory, stopping at 0.7 minimum loss
+./run.py \
+    --name example --type lstm --layers 3 --size 128 --bidir \
+    --gpu-frac 0 \
+    train \
+    --file-path ../example.txt \
+    --loss-stop 0.7 --loss-min-delta 0.05 --loss-patience 5 \
+    --val-min-delta 0.001 --val-patience 40 \
+    --batch-size 4096 --num-epochs 60 --save-epochs 5
+```
 
 ![dank text](/docs/textgenrnn_console.gif)
 
