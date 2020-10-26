@@ -8,7 +8,16 @@ __pycache__
 /docs/textgenrnn_texts.txt
 /docs/hn_weights.hdf5
 *.pyc
+
 test.py
 *.hdf5
 *vocab.json
 *config.json
+
+.vscode/
+.idea/
+models/
+logs/
+
+train*.sh
+train*.bat
