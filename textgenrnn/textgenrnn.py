@@ -43,37 +43,42 @@ class textgenrnn:
                  vocab_path=None,
                  config_path=None,
                  name="textgenrnn",
-                 model_dir="./"):
+                 model_dir="./",
+                 new_model=False):
 
         self.model_dir = model_dir
 
-        if weights_path is None:
-            weights_path = resource_filename(__name__,
-                                             'textgenrnn_weights.hdf5')
+        # Don't load if we are starting a new model
+        # Model is created in train_new_model
+        if not new_model:
+            if weights_path is None:
+                weights_path = resource_filename(__name__,
+                                                 'textgenrnn_weights.hdf5')
 
-        if vocab_path is None:
-            vocab_path = resource_filename(__name__,
-                                           'textgenrnn_vocab.json')
+            if vocab_path is None:
+                vocab_path = resource_filename(__name__,
+                                               'textgenrnn_vocab.json')
 
-        if config_path is not None:
-            with open(config_path, 'r',
-                      encoding='utf8', errors='ignore') as json_file:
-                self.config = json.load(json_file)
+            if config_path is not None:
+                with open(config_path, 'r',
+                          encoding='utf8', errors='ignore') as json_file:
+                    self.config = json.load(json_file)
 
         self.config.update({'name': name})
         self.default_config.update({'name': name})
 
-        with open(vocab_path, 'r',
-                  encoding='utf8', errors='ignore') as json_file:
-            self.vocab = json.load(json_file)
+        if not new_model:
+            with open(vocab_path, 'r',
+                      encoding='utf8', errors='ignore') as json_file:
+                self.vocab = json.load(json_file)
 
-        self.tokenizer = Tokenizer(filters='', lower=False, char_level=True)
-        self.tokenizer.word_index = self.vocab
-        self.num_classes = len(self.vocab) + 1
-        self.model = textgenrnn_model(self.num_classes,
-                                      cfg=self.config,
-                                      weights_path=weights_path)
-        self.indices_char = dict((self.vocab[c], c) for c in self.vocab)
+            self.tokenizer = Tokenizer(filters='', lower=False, char_level=True)
+            self.tokenizer.word_index = self.vocab
+            self.num_classes = len(self.vocab) + 1
+            self.model = textgenrnn_model(self.num_classes,
+                                          cfg=self.config,
+                                          weights_path=weights_path)
+            self.indices_char = dict((self.vocab[c], c) for c in self.vocab)
 
     def generate(self, n=1, return_as_list=False, prefix=None,
                  temperature=[1.0, 0.5, 0.2, 0.2],
@@ -280,7 +285,10 @@ class textgenrnn:
                         validation=True, save_epochs=0,
                         multi_gpu=False, **kwargs):
         self.config = self.default_config.copy()
-        self.config.update(**kwargs)
+        # Only get relevant kwargs
+        for k, v in kwargs.items():
+            if k in self.config:
+                self.config[k] = v
 
         print("Training new model w/ {}-layer, {}-cell {}{}s".format(
             self.config['rnn_layers'], self.config['rnn_size'],
