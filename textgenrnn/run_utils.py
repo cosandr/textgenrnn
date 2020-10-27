@@ -4,7 +4,6 @@ from typing import Dict, Tuple, List
 
 import numpy as np
 import tensorflow as tf
-from keras import backend as K
 
 from textgenrnn.model import textgenrnn_model
 
@@ -61,8 +60,8 @@ def rnn_generate(config_path: str, vocab_path: str, weights_path: str, min_words
             break
 
     if reset:
-        K.clear_session()
-        tf.reset_default_graph()
+        tf.keras.backend.clear_session()
+        tf.compat.v1.reset_default_graph()
 
     return ret_str, num_words
 
@@ -92,8 +91,8 @@ def rnn_guess(models_dir: str, check_models: List[str], in_str: str, reset=False
         ret_dict[name] = pred_next * 100
 
     if reset:
-        K.clear_session()
-        tf.reset_default_graph()
+        tf.keras.backend.clear_session()
+        tf.compat.v1.reset_default_graph()
     return ret_dict
 
 

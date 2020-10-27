@@ -8,7 +8,6 @@ import time
 from typing import Dict
 
 import tensorflow as tf
-from keras.backend.tensorflow_backend import set_session
 
 from textgenrnn import textgenrnn
 from textgenrnn.run_utils import rnn_generate, rnn_guess, get_auto_name, get_paths
@@ -115,8 +114,10 @@ def main():
                             help='Use Bidirectional RNN')
     grp_global.add_argument('--cpu', required=False, action='store_true',
                             help='Ignore GPUs')
-    grp_global.add_argument('--gpu-frac', required=False, type=float,
-                            help='Fraction of GPU memory to use, 0 for all', default=0.8)
+    grp_global.add_argument('--allow-growth', required=False, action='store_true',
+                            help='Allow GPU growth')
+    grp_global.add_argument('--gpu-mem', required=False, type=int,
+                            help='Limit GPU memory, applies to all GPUs', default=0)
     grp_global.add_argument('--verbose', required=False, type=int,
                             help='Verbosity level, 0 silent, 1 progress bar, 2 epoch only.', default=1)
 
@@ -198,12 +199,17 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
     args = parser.parse_args()
     if args.cpu:
-        gpu_config = tf.compat.v1.ConfigProto(device_count={'GPU': 0})
-        set_session(tf.compat.v1.Session(config=gpu_config))
-    elif args.gpu_frac:
-        gpu_config = tf.compat.v1.ConfigProto()
-        gpu_config.gpu_options.per_process_gpu_memory_fraction = args.gpu_frac
-        set_session(tf.compat.v1.Session(config=gpu_config))
+        tf.config.experimental.set_visible_devices([], 'GPU')
+    else:
+        gpus = tf.config.experimental.list_physical_devices('GPU')
+        for gpu in gpus:
+            if args.allow_growth:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            elif args.gpu_mem:
+                tf.config.experimental.set_virtual_device_configuration(
+                    gpu,
+                    [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=args.gpu_mem)]
+                )
 
     args.func(args)
 

@@ -285,7 +285,6 @@ class textgenrnn:
                                   PrintInfo(self.config['name'], verbose),
                                   TensorBoard(
                                       log_dir=kwargs.pop('log_path', './logs/{}'.format(self.config['name'])),
-                                      batch_size=batch_size,
                                       write_graph=True,
                                       write_images=False,
                                   ),
